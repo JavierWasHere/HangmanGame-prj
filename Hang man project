@@ -1,0 +1,257 @@
+#include <iostream>
+#include <vector>
+#include <cstdlib>
+#include <ctime>
+#include <algorithm>
+#include <fstream>
+#include <string>
+#include <sstream>
+
+using namespace std;
+
+// ------------------- HANGMAN DRAWING -------------------
+void drawHangman(int wrongGuesses) {
+    const vector<string> hangmanStages = {
+        R"(
+  +---+
+  |   |
+      |
+      |
+      |
+      |
+=========)",
+        R"(
+  +---+
+  |   |
+  O   |
+      |
+      |
+      |
+=========)",
+        R"(
+  +---+
+  |   |
+  O   |
+  |   |
+      |
+      |
+=========)",
+        R"(
+  +---+
+  |   |
+  O   |
+ /|   |
+      |
+      |
+=========)",
+        R"(
+  +---+
+  |   |
+  O   |
+ /|\  |
+      |
+      |
+=========)",
+        R"(
+  +---+
+  |   |
+  O   |
+ /|\  |
+ /    |
+      |
+=========)",
+        R"(
+  +---+
+  |   |
+  O   |
+ /|\  |
+ / \  |
+      |
+=========)"
+    };
+
+    int stage = min(wrongGuesses, 6);
+    cout << hangmanStages[stage] << endl;
+}
+
+// ------------------- DISPLAY WORD -------------------
+void displayWord(const string& word, const vector<bool>& guessed) {
+    for (size_t i = 0; i < word.length(); ++i) {
+        if (guessed[i])
+            cout << word[i] << " ";
+        else
+            cout << "_ ";
+    }
+    cout << endl;
+}
+
+bool isWordGuessed(const vector<bool>& guessed) {
+    return all_of(guessed.begin(), guessed.end(), [](bool b) { return b; });
+}
+
+// ------------------- HIGH SCORES -------------------
+void saveHighScore(const string& name, int score) {
+    ofstream file("highscores.txt", ios::app);
+    if (file.is_open()) {
+        file << name << " " << score << "\n";
+        file.close();
+    } else {
+        cout << "Unable to save high score." << endl;
+    }
+}
+
+void showHighScores() {
+    ifstream file("highscores.txt");
+    vector<pair<string, int>> scores;
+
+    if (file.is_open()) {
+        string line;
+        while (getline(file, line)) {
+            istringstream iss(line);
+            string name;
+            int score;
+            if (iss >> name >> score) {
+                scores.push_back({name, score});
+            }
+        }
+        file.close();
+
+        // Sort descending
+        sort(scores.begin(), scores.end(), [](auto& a, auto& b) {
+            return a.second > b.second;
+        });
+
+        cout << "\n=== High Scores ===\n";
+        for (size_t i = 0; i < min(scores.size(), size_t(5)); ++i) {
+            cout << i + 1 << ". " << scores[i].first << " - " << scores[i].second << "\n";
+        }
+        cout << "===================\n";
+    }
+}
+
+// ------------------- DIFFICULTY -------------------
+int chooseDifficulty() {
+    int choice;
+    cout << "\nChoose Difficulty:\n";
+    cout << "1. Easy (More guesses, short words)\n";
+    cout << "2. Medium (Standard)\n";
+    cout << "3. Hard (Fewer guesses, long words)\n";
+    cout << "Enter choice (1-3): ";
+    cin >> choice;
+
+    while (choice < 1 || choice > 3) {
+        cout << "Invalid choice. Try again: ";
+        cin >> choice;
+    }
+
+    return choice;
+}
+
+pair<string, int> selectWordAndMaxGuesses(int difficulty, const vector<string>& wordList) {
+    vector<string> filteredWords;
+    int maxGuesses = 6;
+
+    switch (difficulty) {
+        case 1: // Easy
+            for (const auto& word : wordList)
+                if (word.length() <= 5)
+                    filteredWords.push_back(word);
+            maxGuesses = 8;
+            break;
+        case 2: // Medium
+            for (const auto& word : wordList)
+                if (word.length() >= 6 && word.length() <= 8)
+                    filteredWords.push_back(word);
+            maxGuesses = 6;
+            break;
+        case 3: // Hard
+            for (const auto& word : wordList)
+                if (word.length() > 8)
+                    filteredWords.push_back(word);
+            maxGuesses = 4;
+            break;
+    }
+
+    if (filteredWords.empty()) {
+        return {wordList[rand() % wordList.size()], maxGuesses};  // fallback
+    }
+
+    string word = filteredWords[rand() % filteredWords.size()];
+    return {word, maxGuesses};
+}
+
+// ------------------- MAIN -------------------
+int main() {
+    vector<string> wordList = {
+        "dog", "cat", "code", "cup", "mouse", "keyboard", "computer",
+        "laptop", "cplusplus", "hangman", "programming", "developer",
+        "function", "variable", "condition", "compiler"
+    };
+
+    srand(time(0));
+
+    cout << "Welcome to Hangman!" << endl;
+    showHighScores();
+
+    int difficulty = chooseDifficulty();
+    auto [word, maxWrongGuesses] = selectWordAndMaxGuesses(difficulty, wordList);
+
+    vector<bool> guessed(word.length(), false);
+    vector<char> incorrectGuesses;
+    int wrongGuesses = 0;
+
+    while (wrongGuesses <= maxWrongGuesses && !isWordGuessed(guessed)) {
+        drawHangman(wrongGuesses);
+        cout << "\nWord: ";
+        displayWord(word, guessed);
+
+        cout << "Incorrect guesses: ";
+        for (char c : incorrectGuesses) cout << c << " ";
+        cout << "\nGuesses remaining: " << (maxWrongGuesses - wrongGuesses) << endl;
+
+        cout << "Enter a letter: ";
+        char guess;
+        cin >> guess;
+        guess = tolower(guess);
+
+        bool correct = false;
+        bool alreadyGuessed = false;
+
+        for (size_t i = 0; i < word.length(); ++i) {
+            if (word[i] == guess && guessed[i]) {
+                alreadyGuessed = true;
+                break;
+            } else if (word[i] == guess) {
+                guessed[i] = true;
+                correct = true;
+            }
+        }
+
+        if (alreadyGuessed || find(incorrectGuesses.begin(), incorrectGuesses.end(), guess) != incorrectGuesses.end()) {
+            cout << "You already guessed that letter!" << endl;
+        } else if (!correct) {
+            incorrectGuesses.push_back(guess);
+            wrongGuesses++;
+            cout << "Incorrect guess." << endl;
+        } else {
+            cout << "Good guess!" << endl;
+        }
+
+        cout << "---------------------------" << endl;
+    }
+
+    if (isWordGuessed(guessed)) {
+        int score = (maxWrongGuesses - wrongGuesses) * 10;
+        cout << "\n🎉 Congratulations! You guessed the word: " << word << endl;
+        cout << "Your score: " << score << endl;
+        cout << "Enter your name: ";
+        string name;
+        cin >> name;
+        saveHighScore(name, score);
+    } else {
+        drawHangman(6);
+        cout << "\n💀 Game Over! The word was: " << word << endl;
+    }
+
+    return 0;
+}
